@@ -1,0 +1,105 @@
+#!/usr/bin/env perl
+#teammaker
+#Script to pseudorandomly sort people into a list for team-making
+#by MagisterQuis
+#Created 20130326
+#Last Modified 20130329
+
+$|=1;
+use strict;
+use open ':encoding(utf8)';
+
+my %names;
+my $string = randstr();
+my $seed = randstr();
+my $hash = hash($string);
+print "Teammaker started.<br>$string => $hash\n";
+
+while (<>) {
+        #Get message
+        chomp;
+        my ($uid, $chan, $name) = /\[u(\d+):c(\d+)\]\s+(.*)/;
+        my $msg = <>; 
+        chomp $msg;
+        #Commands
+        #Help message
+        if (lc($msg) eq "help") {
+                print "Sorts people into teams.<BR>To use, each player chooses a word by giving the command used to call this script with no extra options.<BR>When all players have given a word, someone give the command 'N teams' where N is the number of teams to make.<BR>A list of teams will be printed out along with information related to ensuring the script isn't cheating.<BR>Players are sorted in an interleaved fashion.<BR>The special word kill-9! causes teammaker to exit.\n";
+        #Print the list, sorted into teams
+        } elsif ($msg =~ /(\d+) teams?/) {
+                #Number of teams
+                my $nteams = $1;
+                #Can't have more teams than players
+                my $nplayers = keys %names;
+                if ($nteams > $nplayers) {
+                        print "You can't have more teams than players.<BR>Try with fewer than $nplayers teams.\n";
+                        next;
+                } elsif ($nteams == 0) {
+                        print "No teams?  Isn't that a free-for-all?\n";
+                        next;
+                } elsif ($nteams < 0) {
+                        print "Negative teams?  Morale starts from the top.\n";
+                        next;
+                } elsif ($nteams == 1) {
+                        print "You're right.  Everybody's a winner.\n";
+                        next;
+                }
+                #Make a list of md5summed strings
+                my @md5s;
+                while (my ($name, $word) = each %names) {
+                        my $h = hash($word);
+                        push @md5s, "$h\t$name";
+                }
+                #Sort the list
+                @md5s = sort @md5s;
+                #Make a list of lists of players
+                my @roster;
+                map {push @roster, []} (1..$nteams);
+                #Loop over the sorted list
+                while (my ($i, $md5) = each @md5s) {
+                        #Break out the bits
+                        my ($h, $name) = split(/\t/, $md5);
+                        #Put it in the appropriate list
+                        push @{$roster[$i % $nteams]}, "$name => $h"
+                }
+                #Print out the teams
+                for my $teamlist ($#roster) {
+                        my $team = "Team $teamlist";
+                        for my $player (@{$roster[$teamlist]}) {
+                                $team .= "<BR>$player";
+                        }
+                        print "$team\n";
+                }
+                #Print the seed
+                print "The seed was: $seed\n";
+                last;
+        #Special case to exit
+        } elsif ($msg eq "kill-9!") {
+                print ":(\n";
+                last;
+        #Assume a word is to be set
+        } else {
+                $names{$name} = $msg;
+                print "Saved $name: $msg\n";
+        }
+}
+
+
+
+
+
+#Returns a 16-character random string
+sub randstr {
+        my @chars = ("A".."Z", "a".."z", "0"..9);
+        my $string = "";
+        $string .= $chars[rand @chars] for 1..16;
+        return $string;
+}
+
+#Returns the hash of the string with $seed
+sub hash {
+        (my $instr) = @_;
+        `echo ${seed}${instr} | openssl dgst -md5` =~ /([a-zA-Z0-9]{32})/;
+        return $1;
+}
+
