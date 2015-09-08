@@ -25,23 +25,21 @@ QUESTION_LENGTH = 10
 #A thread representing a connection to a script
 class Trivia(threading.Thread):
     process = None
-    sender = None
-    receiver = None
+    conn = None
     _running = False
     name = ""
     queue = None
     questionTime = None
 
-    def __init__(self, receiver):
+    def __init__(self, conn):
         threading.Thread.__init__(self)
-        self.sender = receiver.sender
-        self.receiver = receiver
+        self.conn = conn
         self.name = "tb"
         self.queue = Queue.Queue()
 
     #A loop to read output from the process and send it to the tubes
     def run(self):
-        _running = True
+        self._running = True
         intro = "Welcome to triviabot."
         intro += "<p> To give a command, type '!tb' followed by: </p>"
         intro += "<p> - 'gimme' for trivia </p>"
@@ -63,7 +61,7 @@ class Trivia(threading.Thread):
         #a = a+ "a"
         #self.send(str(a))
         
-        while _running:
+        while self._running:
             #Check to see new messages!
             try:
                 command = self.queue.get(False)[0]
@@ -83,16 +81,16 @@ class Trivia(threading.Thread):
                     _running = False
 
                 elif(command=="info"):
-                    self.send("All trivia was found from the back of Jaimi's Libra pads")
+                    self.send("All trivia was found from the back of cereal boxes")
 
                 elif(command=="harry"):
-                    self.send("Harry 'Suakweuy' Simpson is not the best. a.k.a bronze")
+                    self.send("Harry 'Suakweuy' Simpson is not the best.")
 
                 elif(command=="help"):
                     self.send(intro)
 
                 else:
-                    self.send("unknown command")
+                    #self.send("unknown command")
             time.sleep(1)
 
         #If we're done, send the last words to the chat
@@ -136,7 +134,7 @@ class Trivia(threading.Thread):
 
     #Send 'message' to the server
     def send(self,message):
-        self.sender.send_chat_message(message)
+        self.conn.send_chat_message(message)
         return
 
     #Stop running.
