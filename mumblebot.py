@@ -46,8 +46,7 @@ import sys
 import threading
 import time
 
-from receiver import Receiver
-from sender import Sender
+from connection import Connection
 from trivia import Trivia
 
 import data
@@ -88,41 +87,39 @@ def main():
     #Connect to server
     try:
         socket = connect_to_server()
+        print "Connected"
     except ssl.SSLError as e:
         print "Unable to connect.  Are you banned?: " + str(e)
         return -1
     #TODO: debug message for adding user
     #TODO: Handle non-ascii characters
     #Make thread for sending, give it a pipe
-    sender = Sender(socket)
-    sender.start()
-    print "Starting Sender"
-
-    #Make thread for listening, spawn subprocesses for each module
-    receiver = Receiver(socket, sender)
-    receiver.start()
-    #print "Starting Receiver"
+    conn = Connection(socket)
+    conn.start()
+    print "Started!"
+    print "works"
 
     try:
         import time
-        while(sender.current_channel==None):
+        while(conn.current_channel==None):
             time.sleep(1)
 
-        trivia = Trivia(receiver)
-        receiver.addService(trivia)
+        print "CHANNEL: " + str(conn.current_channel)
+
+        trivia = Trivia(conn)
+        conn.addService(trivia)
         trivia.start()
 
         #TODO: multiple tokens
-        while sender.is_alive() and receiver.is_alive():
+        while conn.is_alive():
             time.sleep(5)
 
     except KeyboardInterrupt:
         pass
 
+    print "Closing down"
     #close everything down!
-    #receiver.stop()
-    sender.join()
-    receiver.join()
+    conn.stop()
     socket.close()
     exit(0)
 
