@@ -108,8 +108,9 @@ class Trivia(threading.Thread):
 		str_num = str(number) + "."
 		for line in searchfile:
 			if str_num in line: 
-				self.send(line)
 				break
+		line = line.split(".")[1]
+		self.send(line)
 		searchfile.close()
 		return
 
@@ -121,7 +122,7 @@ class Trivia(threading.Thread):
 			self.questionTimeStart = time.clock()
 
 
-	def checkAnswer(input):
+	def checkAnswer(self,input):
 		if(self.questionTimeStart != None):
 			currentTime = time.clock()
 

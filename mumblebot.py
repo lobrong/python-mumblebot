@@ -79,7 +79,7 @@ def main():
 
     #Parse config file
     parse_config(changed)
-    print "parsed args"
+    print "Parsed Arguments"
 
     #Connect to server
     try:

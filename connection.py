@@ -32,6 +32,8 @@ debugmsg = logmsg
 class Connection(threading.Thread):
 	socket = None
 	pingthread = None
+	sendmsgthread = None
+	recvmsgthread = None
 	next_ping_time = None
 	_running = False
 
@@ -97,54 +99,60 @@ class Connection(threading.Thread):
 		#TODO: Timeout on rx of auth message if !mumble server
 		#Start the pinger
 		#thread.start_new_thread(self._pingLoop, ()) 
+		self._running = True
 		self.pingthread = threading.Thread(target=self.send_pings)
 		self.pingthread.daemon = True
 		self.pingthread.start()
 
-		_running = True
-		while _running:
-			
-			# ----- SENDER -----
-			try:
-				count = 0
-				msg = self.txqueue.get(False)
-				while msg!=None and len(msg) > 0:
-					#Lop of the bits we don't need to send
-					count = self.socket.send(msg)
-					msg = msg[count:]
-			except Queue.Empty as ept:
-				pass
+		self.sendmsgthread = threading.Thread(target=self.send_msgs)
+		self.sendmsgthread.start()
 
-			# ----- RECEIVER -----
+		
+		while self._running:
 			#Get the six header bytes
 			header = self.recvsize(6)
-			#Unpack the header
-			(type, size) = struct.unpack(">HL", header)
-			data = self.recvsize(size)
-			typename = msgtype[type].__name__
-			#Handle each message, this is going to get inefficient.
-			try:
-				{"Version":         self.onVersion,
-				 "ChannelState":    self.onChannelState,
-				 "UserState":       self.onUserState,
-				 "TextMessage":     self.onTextMessage,
-				 "Reject":          self.onReject,
-				}[typename](data)
+			if header != None:
+				#Unpack the header
+				(type, size) = struct.unpack(">HL", header)
+				data = self.recvsize(size)
+				typename = msgtype[type].__name__
+				#Handle each message, this is going to get inefficient.
+				print "Got {}-byte {} message".format(size, typename)
+				try:
+					{"Version":         self.onVersion,
+					 "ChannelState":    self.onChannelState,
+					 "UserState":       self.onUserState,
+					 "TextMessage":     self.onTextMessage,
+					 "Reject":          self.onReject,
+					}[typename](data)
 
-				#print "Handled {}-byte {} message".format(size, typename)
-			except KeyError as ke:
-				#print("{} message unhandled".format(typename)) #DEBUG
-				pass
+					
+				except KeyError as ke:
+					#print("{} message unhandled".format(typename)) #DEBUG
+					pass
 
 			#print "end loop, status: " + str(self._running)
 
-
+	def send_msgs(self):
+		while self._running:
+			msg = self.txqueue.get()	# Block until msg
+			if msg != None:
+				totalsent = 0
+				while totalsent < len(msg):
+					#Lop of the bits we don't need to send
+					sent = self.socket.send(msg[totalsent:])
+					if sent == 0:
+						raise RuntimeError("socket brokens")
+					totalsent += sent
+			else:
+				return
 
 	def send_pings(self):
-		debugmsg("Pinger starting")
-		while True:
+		print "Pinger Thread Starting"
+		while self._running:
 			self.send(self.pingdata)
 			time.sleep(5)
+		print "Pinger Thread Ending"
 
 
 #---------------------------------------------------------------------------------------
@@ -175,6 +183,20 @@ class Connection(threading.Thread):
 #---------------------------------------------------------------------------------------
 # 									RECEIVER STUFF
 #---------------------------------------------------------------------------------------
+
+	#Receive a specified number of bytes
+	def recvsize(self, size):
+		try:
+			buf = ""
+			while len(buf) < size:
+				recv = self.socket.recv(size - len(buf))
+				if recv == '':
+					raise RuntimeError("socket broken :(")
+				buf += recv
+					
+			return buf
+		except:
+			return None
 
 	def onVersion(self, data):
 		serverversion = Mumble_pb2.Version()
@@ -215,11 +237,11 @@ class Connection(threading.Thread):
 
 		#Regular channels, new channel
 		elif channelstate.channel_id not in self.channels:
-			addChannel(channelstate)
+			self.addChannel(channelstate)
 
 		#If we have the channel, update it
 		else:
-			updateChannel(channelstate)
+			self.updateChannel(channelstate)
 
 		#Join the right channel when we learn about it
 		to_join = None
@@ -338,31 +360,18 @@ class Connection(threading.Thread):
 		textmessage.ParseFromString(data)
 		print "Message: %s from [%i] %s"%(textmessage.message,textmessage.actor,self.users[textmessage.actor][1])
 
-		#If the message doesn't start with the trigger, we don't care about it.
-		if not textmessage.message.startswith(config["trigger"]):
-			return
+		# If the message doesn't start with the trigger, we don't care about it.
+		# if not textmessage.message.startswith(config["trigger"]):
+		# return
 		
 		#message is of format <trigger><service> <message>
-		triggerLength = len(config["trigger"])
-		specific = textmessage.message.split(" ")
-		nameToSend = specific[0][triggerLength:]
-		print nameToSend
+		#triggerLength = len(config["trigger"])
+		#specific = textmessage.message.split(" ")
+		#nameToSend = specific[0][triggerLength:]
+		#print nameToSend
 		for t in self.services:
-			if(t.name == nameToSend):
-				t.recv(textmessage.message,textmessage.actor,self.users[textmessage.actor][1])
+			t.recv(textmessage.message,textmessage.actor,self.users[textmessage.actor][1])
 
-	#Receive a specified number of bytes
-	def recvsize(self, size):
-		try:
-			buf = ""
-			while len(buf) < size:
-				recv = self.socket.recv(size - len(buf))
-				buf += recv
-				if len(buf)==0:
-					return None
-			return buf
-		except:
-			return None
 
 	#Print channel list
 	def printchannels(self):
