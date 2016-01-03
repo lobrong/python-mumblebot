@@ -78,12 +78,9 @@ def main():
     changed = parse_arguments()
 
     #Parse config file
-    #parse_config(changed)
+    parse_config(changed)
     print "parsed args"
 
-    #Enqueued messages will be sent back to the server
-    #txqueue = Queue.Queue()
-    #txqueue = queue.Queue() #2TO3
     #Connect to server
     try:
         socket = connect_to_server()
@@ -91,21 +88,18 @@ def main():
     except ssl.SSLError as e:
         print "Unable to connect.  Are you banned?: " + str(e)
         return -1
+
     #TODO: debug message for adding user
     #TODO: Handle non-ascii characters
-    #Make thread for sending, give it a pipe
     conn = Connection(socket)
     conn.start()
-    print "Started!"
-    print "works"
 
     try:
         import time
         while(conn.current_channel==None):
             time.sleep(1)
 
-        print "CHANNEL: " + str(conn.current_channel)
-
+        # Add services here
         trivia = Trivia(conn)
         conn.addService(trivia)
         trivia.start()
@@ -165,27 +159,24 @@ def parse_arguments():
 #Try to find the config file.  If it exists, open it and parse it
 def parse_config(changed):
     global config
-    #Open the config file
     f = open_config()
     #If it's not found, log and exit
     if f is None:
         debugmsg("Unable to open config file ({}).".format(config["config"]))
         return None
-    #Read each line of the file
+
     for line in f:
-        #Remove whitespace
         line = line.strip()
         #Ignore comments
         if len(line) == 0 or line[0] == '#': continue
-        #Split the line into keys and values
+
         key, value = line.split(None, 1)
         #Ignore it if set by the command line
         if key in changed: continue
         #Add it to the config if it's not set already
         config[key] = value
-    #Update logging functions
+
     update_logging()
-    #Log it
     logmsg("Read config from {}".format(f.name))
     #Print out options, if debugging
     for o in config:
@@ -222,16 +213,16 @@ def connect_to_server():
     #Make sure we have a server and port
     if "server" not in config:
         errmsg("No hostname or IP address given.  Unable to proceed.")
-        print "wah"
         sys.exit(1)
+
     #Connect to the server
     try:
         s = socket.create_connection((config["server"], int(config["port"])),
-                                     float(config["timeout"]), (config["srcip"],
-                                                         int(config["srcport"])))
+                                                    float(config["timeout"]), 
+                                     (config["srcip"], int(config["srcport"]))
+                                    )
     except socket.error as msg:
         errmsg("Unable to connect to {}:{} - {}.".format(config["server"],config["port"], msg))
-        print "wah1"
         exit(1)
 
     sslsocket = ssl.wrap_socket(s, keyfile=config["keyfile"],

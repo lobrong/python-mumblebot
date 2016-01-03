@@ -100,21 +100,18 @@ class Connection(threading.Thread):
 		self.pingthread = threading.Thread(target=self.send_pings)
 		self.pingthread.daemon = True
 		self.pingthread.start()
-		print "sent a ping"
 
 		_running = True
 		while _running:
-			#print "start loop"
-
+			
 			# ----- SENDER -----
 			try:
 				count = 0
 				msg = self.txqueue.get(False)
-				res = msg
-				while res!=None and len(res) > 0:
+				while msg!=None and len(msg) > 0:
 					#Lop of the bits we don't need to send
-					count = self.socket.send(res)
-					res = res[count:]
+					count = self.socket.send(msg)
+					msg = msg[count:]
 			except Queue.Empty as ept:
 				pass
 
@@ -168,11 +165,9 @@ class Connection(threading.Thread):
 		type = msgnum[msg.__class__.__name__]
 		#Format as a series of bytes
 		msg = msg.SerializeToString()
-		#Size of messages
 		size = len(msg)
 		#Pack the header
 		hdr = struct.pack(">HL", type, size)
-		#Send it out
 		self.sendlock.acquire()
 		self.txqueue.put(hdr+msg)
 		self.sendlock.release()
@@ -220,58 +215,22 @@ class Connection(threading.Thread):
 
 		#Regular channels, new channel
 		elif channelstate.channel_id not in self.channels:
-			t = Channel()
-			t.name = channelstate.name
-			t.parent = channelstate.parent
-			#Check for a list of orphans for which this is the parent
-			if channelstate.channel_id in self.orphans:
-				for c in self.orphans[channelstate.channel_id]:
-					if c not in t.children:
-						t.children.add(c)
-			#If the parent is there, add it to the parent's children
-			if channelstate.parent in self.channels:
-				self.channels[channelstate.parent].children.add(channelstate.channel_id)
-			#If not, add it to the list of orphans for that child
-			else:
-				if t.channel_id not in self.orphans:
-					self.orphans[t.parent] = []
-				self.orphans[t.parent].add(self.channel_id)
-			#Add the channel to the list
-			self.channels[channelstate.channel_id] = t
-			debugmsg("Added new channel %s [%i:%i]"%(t.name, t.parent,
-													 channelstate.channel_id))
+			addChannel(channelstate)
+
 		#If we have the channel, update it
 		else:
-			#Update the name
-			if channelstate.name and (self.channels[channelstate.channel_id] != channelstate.name):
-				oldname = self.channels[channelstate.channel_id].name
-				self.channels[channelstate.channel_id].name = channelstate.name
-				debugmsg("Changed channel %i's name from %s to %s"%(
-					channelstate.channel_id, oldname, channelstate.name))
-			#Update the parent
-			if self.channels[channelstate.channel_id].parent != channelstate.parent:
-				#Remove the channel from the old parent's list of children
-				oldpid = self.channels[channelstate.channel_id].parent
-				self.channels[oldpid].children.remove(channelstate.channel_id)
-				#Add it to the new parent's list of children, if we can
-				if channelstate.parent in self.channels:
-					self.channels[channelstate.parent].children.add(channelstate.channel_id)
-				#Failing that, it's an orphan
-				else:
-					self.orphans.add(channelstate.channel_id)
-				debugmsg("Changed channel %i's (%s) parent from %i to %i"
-						 %(channelstate.channel_id,
-						   self.channels[channelstate.channel_id].name,
-						   oldpid, channelstate.parent))
+			updateChannel(channelstate)
+
 		#Join the right channel when we learn about it
 		to_join = None
 		#If we're meant to be in root, join it
 		if config["channel"] == "/" and 0 in self.channels:
 			to_join = 0
+
 		#If we're given a channel number, join it when we get it
-		elif config["channel"].isdigit() and \
-				int(config["channel"]) in self.channels:
+		elif config["channel"].isdigit() and int(config["channel"]) in self.channels:
 			to_join = int(config["channel"])
+
 		#If we're given a path, join it
 		elif config["channel"][0] == "/" and len(config["channel"]) > 1 and 0 in self.channels:
 			#Get a list of channel bits.
@@ -295,15 +254,68 @@ class Connection(threading.Thread):
 							return _traverse_tree(self, channel_path[1:], p)
 			#Find the id of the channel to join
 			to_join = _traverse_tree(self, channel_path, 0)
+
 		#If we're not already there, join the channel
 		if to_join is not None and to_join != self.current_channel:
 			userstate = Mumble_pb2.UserState()
 			userstate.channel_id = to_join
 			self.send(userstate)
 			self.current_channel = to_join
-			self.current_channel = to_join
 			print("Joined [c%i] %s"%(to_join, self.channels[to_join].name))
 		self.channellock.release()
+
+	# Add channel to list of stored channels
+	def addChannel(self,channelstate):
+		t = Channel()
+		t.name = channelstate.name
+		t.parent = channelstate.parent
+		#Check for a list of orphans for which this is the parent
+		if channelstate.channel_id in self.orphans:
+			for c in self.orphans[channelstate.channel_id]:
+				if c not in t.children:
+					t.children.add(c)
+		#If the parent is there, add it to the parent's children
+		if channelstate.parent in self.channels:
+			self.channels[channelstate.parent].children.add(channelstate.channel_id)
+		#If not, add it to the list of orphans for that child
+		else:
+			if t.channel_id not in self.orphans:
+				self.orphans[t.parent] = []
+			self.orphans[t.parent].add(self.channel_id)
+		#Add the channel to the list
+		self.channels[channelstate.channel_id] = t
+		debugmsg("Added new channel %s [%i:%i]"%(t.name, t.parent, channelstate.channel_id))
+
+	def updateChannel(self,channelstate):
+		#Update the name
+		if channelstate.name and (self.channels[channelstate.channel_id] != channelstate.name):
+			oldname = self.channels[channelstate.channel_id].name
+			self.channels[channelstate.channel_id].name = channelstate.name
+			debugmsg("Changed channel %i's name from %s to %s"%(
+				channelstate.channel_id, oldname, channelstate.name))
+		#Update the parent
+		if self.channels[channelstate.channel_id].parent != channelstate.parent:
+			#Remove the channel from the old parent's list of children
+			oldpid = self.channels[channelstate.channel_id].parent
+			self.channels[oldpid].children.remove(channelstate.channel_id)
+			#Add it to the new parent's list of children, if we can
+			if channelstate.parent in self.channels:
+				self.channels[channelstate.parent].children.add(channelstate.channel_id)
+			#Failing that, it's an orphan
+			else:
+				self.orphans.add(channelstate.channel_id)
+			debugmsg("Changed channel %i's (%s) parent from %i to %i"
+					 %(channelstate.channel_id,
+					   self.channels[channelstate.channel_id].name,
+					   oldpid, channelstate.parent))
+
+	#We've been rejected for some reason
+	def onReject(self, data):
+		reject = Mumble_pb2.Reject()
+		reject.ParseFromString(data)
+		errmsg("Unable to join server (%i): %s"%(reject.type,reject.reason))
+		#TODO: Auth with certificate
+		self.stop()
 
 	def onUserState(self, data):
 		#If we're still collecting users, reset the timeout
@@ -318,11 +330,7 @@ class Connection(threading.Thread):
 		userstate = Mumble_pb2.UserState()
 		userstate.ParseFromString(data)
 		#Make sure the user is in the list
-		self.users[userstate.session] = (userstate.channel_id, userstate.name,
-										userstate.session)
-		wah = userstate.user_id
-		if(wah!=None):
-			print "User ID:" + str(wah) + " Name:" + str(userstate.name)
+		self.users[userstate.session] = (userstate.channel_id, userstate.name, userstate.session)
 
 	#Handle messages
 	def onTextMessage(self, data):
@@ -362,7 +370,7 @@ class Connection(threading.Thread):
 		self.channellock.acquire()
 		#Depth-first traversal
 		self._printchannel(0, "")
-		#Release the list
+
 		self.channellock.release()
 
 	#Print a channel's children, recursively, depth-first.  Pass in a channel
@@ -379,22 +387,12 @@ class Connection(threading.Thread):
 		for u in self.users:
 			logmsg("[u%i:c%i]\t%s"%(u, self.users[u][0], self.users[u][1]))
 
-	#We've been rejected for some reason
-	def onReject(self, data):
-		reject = Mumble_pb2.Reject()
-		reject.ParseFromString(data)
-		errmsg("Unable to join server (%i): %s"%(reject.type,reject.reason))
-		#TODO: Auth with certificate
-		self.stop()
-
-
 	#Stop this thread and all subthreads
 	def stop(self):
 		for t in self.services:
 			t.stop()
 		self._running = False
 		self.txqueue.put(None)
-
 
 
 	#------------Service functions------------
