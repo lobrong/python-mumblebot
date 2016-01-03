@@ -73,7 +73,6 @@ class Connection(threading.Thread):
 	#Wait for messages, act on them as appropriate
 	def run(self):
 		self.update_logging()
-		print "Running conn"
 
 		#Send back our version info
 		clientversion = Mumble_pb2.Version()
@@ -107,7 +106,6 @@ class Connection(threading.Thread):
 		self.sendmsgthread = threading.Thread(target=self.send_msgs)
 		self.sendmsgthread.start()
 
-		
 		while self._running:
 			#Get the six header bytes
 			header = self.recvsize(6)
@@ -358,7 +356,7 @@ class Connection(threading.Thread):
 	def onTextMessage(self, data):
 		textmessage = Mumble_pb2.TextMessage()
 		textmessage.ParseFromString(data)
-		print "Message: %s from [%i] %s"%(textmessage.message,textmessage.actor,self.users[textmessage.actor][1])
+		#print "Message: %s from [%i] %s"%(textmessage.message,textmessage.actor,self.users[textmessage.actor][1])
 
 		# If the message doesn't start with the trigger, we don't care about it.
 		# if not textmessage.message.startswith(config["trigger"]):
