@@ -27,4 +27,6 @@ Future bot ideas:
 To-dos
   - mute/deafen upon entry to reduce incoming packets (depending on application)
   - handle 'CTRL+C' / 'kill <pid>' signals to quit gracefully
+  - Create base 'service/bot' class that others can implement against
+  - Handle more packet types (Currently only focusing on messages, channels and users)
   - MORE ROBUSTNESS
