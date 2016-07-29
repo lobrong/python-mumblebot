@@ -69,7 +69,7 @@ class Trivia(Bot):
             if len(messageSplit) == 2:
                 firstWord = messageSplit[0]
 
-            if firstWord is None and (firstWord == "!tb"):
+            if firstWord is not None and firstWord == "!tb":
                 self.parseCommand(messageSplit[1])
             else:
                 self.checkAnswer(msg, name)
@@ -103,7 +103,7 @@ class Trivia(Bot):
             if str_num in line:
                 to_send = line
                 break
-        to_send = to_send.split(".")[1]
+        to_send = to_send.split(".", 1)[1]
         self.send(to_send)
         searchfile.close()
         return
@@ -132,7 +132,7 @@ class Trivia(Bot):
                 self.send("You got it {}!".format(name))
 
     def timeUp(self):
-        to_send =  "<p> Time up! </p>"
+        to_send = "<p> Time up! </p>"
         to_send += "<p> No one got it! </p>"
         to_send += "<p> Q: " + self.question + "</p>"
         to_send += "<p> A: " + self.answer + "</p>"
@@ -149,7 +149,6 @@ class Trivia(Bot):
     # Send 'message' to the server
     def send(self, message):
         self.conn.send_chat_message(message)
-        return
 
     # Stop running.
     def stop(self):

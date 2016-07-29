@@ -41,7 +41,6 @@ class Connection(threading.Thread):
     userevent = None
 
     txqueue = None
-    sendlock = None
     pingdata = None
 
     def __init__(self, socket):
@@ -52,7 +51,6 @@ class Connection(threading.Thread):
         self.channellock = threading.Lock()
 
         self.txqueue = Queue.Queue()
-        self.sendlock = threading.Lock()
         self.pingdata = Mumble_pb2.Ping()
         self.pingdata.resync = 0
 
@@ -156,9 +154,7 @@ class Connection(threading.Thread):
         size = len(msg)
         # Pack the header
         hdr = struct.pack(">HL", messageType, size)
-        self.sendlock.acquire()
         self.txqueue.put(hdr+msg)
-        self.sendlock.release()
 
 # ---------------------------------------------------------------------------------------
 # 									RECEIVER STUFF
@@ -339,8 +335,8 @@ class Connection(threading.Thread):
         textmessage = Mumble_pb2.TextMessage()
         textmessage.ParseFromString(data)
         logging.debug("Message: {} from [{}] {}".format(textmessage.message, textmessage.actor, self.users[textmessage.actor][1]))
-        for t in self.services:
-            t.recv(textmessage.message, textmessage.actor, self.users[textmessage.actor][1])
+        for service in self.services:
+            service.recv(textmessage.message, self.users[textmessage.actor][1])
 
     # Print channel list
     def printchannels(self):
