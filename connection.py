@@ -123,8 +123,6 @@ class Connection(threading.Thread):
                     if sent == 0:
                         raise RuntimeError("socket brokens")
                     totalsent += sent
-            else:
-                return
 
     def send_pings(self):
         logging.debug("Pinger Thread Starting")
@@ -144,7 +142,6 @@ class Connection(threading.Thread):
         textmessage.message = msg
         textmessage.channel_id.append(self.current_channel)
         self.send(textmessage)
-        return
 
     # Send a message to the series of tubes.  msg is a protobuf object
     def send(self, msg):
@@ -174,7 +171,7 @@ class Connection(threading.Thread):
                 buf += recv
 
             return buf
-        except:
+        except RuntimeError:
             return None
 
     def onVersion(self, data):
@@ -187,7 +184,6 @@ class Connection(threading.Thread):
                                                           serverversion.release,
                                                           serverversion.os,
                                                           serverversion.os_version))
-        return
 
     def onChannelState(self, data):
         # If we're still collecting channels, reset the timeout
