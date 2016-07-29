@@ -9,8 +9,9 @@ from random import randint
 import data
 config = data.config
 
-#Length before answers accepted is over (in seconds)
+# Length before answers accepted is over (in seconds)
 QUESTION_LENGTH = 10
+
 
 class Trivia(Bot):
     process = None
@@ -35,7 +36,7 @@ class Trivia(Bot):
         self.name = "tb"
         self.queue = Queue.Queue()
 
-    #A loop to read output from the process and send it to the tubes
+    # A loop to read output from the process and send it to the tubes
     def run(self):
         self._running = True
         intro = "Welcome to triviabot!"
@@ -48,54 +49,44 @@ class Trivia(Bot):
         intro += "<p> - 'quit' to close mumblebot :(</p>"
         self.introduction = intro
         self.send(self.introduction)
-        #a = "a                                                                                                              "
-        #a = a+ "                                                                                                              "
-        #a = a+ "                             "
-        #print len(a)
-        #self.send(str(a))
-        #a = "                                                                                                              "
-        #a = a+ "                                                                                                              "
-        #a = a+ "                                                                                                              "
-        #a = a+ "a"
-        #self.send(str(a))
 
         while self._running:
-            #Check to see new messages!
+            # Check to see new messages!
             command = self.queue.get()
             msg = command[0]
             name = command[1]
             logging.debug("TB: got {}".format(msg))
-            #Parse command
+            # Parse command
             # Commands are of the following:
             # "!tb <command>"
-            messageSplit = msg.split(" ", 1)	# Only split once. (Into two pieces.)
+            messageSplit = msg.split(" ", 1)  # Only split once. (Into two pieces.)
             firstWord = None
             if len(messageSplit) == 2:
                 firstWord = messageSplit[0]
 
-            if firstWord != None and (firstWord == "!tb"):
+            if firstWord is None and (firstWord == "!tb"):
                 self.parseCommand(messageSplit[1])
             else:
-                self.checkAnswer(msg,name)
+                self.checkAnswer(msg, name)
             time.sleep(1)
 
-        #If we're done, send the last words to the chat
+        # If we're done, send the last words to the chat
         self.conn.send_chat_message("Triviabot hears your pleas for mercy, but triviabot is a hard mistress.")
 
     def parseCommand(self, command):
-        if (command == "gimme"):
+        if command == "gimme":
             self.trivia()
 
-        elif (command == "question"):
+        elif command == "question":
             self.questionStart()
 
-        elif (command == "quit"):
-            _running = False
+        elif command == "quit":
+            self._running = False
 
-        elif (command == "info"):
+        elif command == "info":
             self.send("All trivia was found on the back of cereal boxes")
 
-        elif (command == "help"):
+        elif command == "help":
             self.send(self.introduction)
 
     # Send a random bit of trivia to the server.
@@ -103,11 +94,13 @@ class Trivia(Bot):
         searchfile = open("random.txt", "r")
         number = randint(1, 159)
         str_num = str(number) + "."
+        to_send = None
         for line in searchfile:
             if str_num in line:
+                to_send = line
                 break
-        line = line.split(".")[1]
-        self.send(line)
+        to_send = to_send.split(".")[1]
+        self.send(to_send)
         searchfile.close()
         return
 
@@ -125,16 +118,14 @@ class Trivia(Bot):
             self.send("Question in progress!")
 
     def checkAnswer(self, answer, name):
-        if self.questionAnswered == False:
+        if not self.questionAnswered:
 
-            if(answer == self.answer):
+            if answer == self.answer:
                 self.questionTimer.cancel()
                 self.questionAnswered = True
                 self.question = None
                 self.answer = None
                 self.send("You got it {}!".format(name))
-
-
 
     def timeUp(self):
         to_send =  "<p> Time up! </p>"
@@ -147,15 +138,15 @@ class Trivia(Bot):
         self.conn.send_chat_message(to_send)
         return
 
-    #Used to receive data from the receiver regarding a message that relates to us
+    # Used to receive data from the receiver regarding a message that relates to us
     def recv(self, message, name):
         self.queue.put([message,name])
 
-    #Send 'message' to the server
+    # Send 'message' to the server
     def send(self, message):
         self.conn.send_chat_message(message)
         return
 
-    #Stop running.
+    # Stop running.
     def stop(self):
         self._running = False

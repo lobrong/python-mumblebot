@@ -23,27 +23,16 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#mumblebot
-#by MagisterQuis
+# mumblebot
+# by MagisterQuis
 
-#TODO: Generate certificate for auth
+# TODO: Generate certificate for auth
 # Imported modules
 import argparse
-import datetime
-import Mumble_pb2
 import os
-import platform
-import time
-
-#import queue #2TO3 Change this
-import Queue
-import re
 import socket
 import ssl
-import struct
-import subprocess
 import sys
-import threading
 import time
 import logging
 
@@ -56,7 +45,7 @@ config = data.config
 msgtype = data.msgtype
 msgnum = data.msgnum
 
-#Config file locations
+# Config file locations
 config_locations = (
     ".",
     os.environ["HOME"],
@@ -66,12 +55,13 @@ config_locations = (
 
 logger = None
 
-#Parse the arguments on the command line
+
+# Parse the arguments on the command line
 def parse_arguments():
     global config
-    #Argparser
+    # Argparser
     parser = argparse.ArgumentParser(description="Extensible bot for Mumble")
-    #Command-line options
+    # Command-line options
     parser.add_argument("-c", "--config", metavar="CONFIGFILE", help="Specifies the config file.  Arguments given on the command line take precedence over the config file.  If this is not specified, the config file will be looked for in the following locations: %s.  Every long option which may specified on the command line may be specified in the config file, separated by its value by whitespace."%", ".join([str(p) for p in config_locations]))
     parser.add_argument("-s", "--server", help="The mumble server to which to connect.")
     parser.add_argument("-p", "--port", type=int, help="The port to which to connect on the mumble server.")
@@ -90,54 +80,57 @@ def parse_arguments():
     parser.add_argument("--scriptwd", help="The working directory for the scripts.  The default (/) is usually fine.")
     parser.add_argument("--scriptdir", help="The directory containing the scripts to run.  The default (/etc/mumblebot.d) is usually fine.  This is relative to SCRIPTWD if not absolute.")
     parser.add_argument("--channel", help="The channel to join.  This may either be given as a Unix-style path (/rootchannel/channel/subchannel) or a channel ID number (which may be retrieved with printchannels).  The default is the root channel.")
-    #Get the options from the command line
+    # Get the options from the command line
     options = vars(parser.parse_args())
-    #Save the options
-    changed = [] #List of changed options
+    # Save the options
+    changed = []  # List of changed options
     for o in options:
-        #TODO: Add numbers (or something) to username when username is already in use
+        # TODO: Add numbers (or something) to username when username is already in use
         if options[o] is not None:
             config[o] = options[o]
             changed.append(o)
 
     return changed
 
-#Try to find the config file.  If it exists, open it and parse it
+
+# Try to find the config file.  If it exists, open it and parse it
 def parse_config(changed):
     global config
     f = open_config()
-    #If it's not found, log and exit
+    # If it's not found, log and exit
     if f is None:
         logging.debug("Unable to open config file ({}).".format(config["config"]))
         return None
 
     for line in f:
         line = line.strip()
-        #Ignore comments
-        if len(line) == 0 or line[0] == '#': continue
+        # Ignore comments
+        if len(line) == 0 or line[0] == '#':
+            continue
 
         key, value = line.split(None, 1)
-        #Ignore it if set by the command line
-        if key in changed: continue
-        #Add it to the config if it's not set already
+        # Ignore it if set by the command line
+        if key in changed:
+            continue
+        # Add it to the config if it's not set already
         config[key] = value
 
     logging.info("Read config from {}".format(f.name))
-    #Print out options, if debugging
+    # Print out options, if debugging
     for o in config:
         logging.debug("Option {}: {}".format(o, config[o]))
 
 
 def open_config():
     f = None
-    #If the config files starts with a /, assume it's an absolute path
+    # If the config files starts with a /, assume it's an absolute path
     if config["config"][0] == "/":
         try:
             f = open(config["config"], "r")
             return f
         except IOError as e:
             f = None
-    #Cycle through the default locations
+    # Cycle through the default locations
     for l in config_locations:
         try:
             f = open(os.path.join(l, config["config"]))
@@ -149,23 +142,24 @@ def open_config():
             return f
         except:
             f = None
-    #If we're here, we couldn't find a file to open
+    # If we're here, we couldn't find a file to open
     return f
 
 
-#Makes a socket to the server and handshakes
+# Makes a socket to the server and handshakes
 def connect_to_server():
     #Make sure we have a server and port
     if "server" not in config:
         logging.error("No hostname or IP address given.  Unable to proceed.")
         sys.exit(1)
 
-    #Connect to the server
+    # Connect to the server
     try:
-        s = socket.create_connection((config["server"], int(config["port"])),
-                                                    float(config["timeout"]), 
-                                     (config["srcip"], int(config["srcport"]))
-                                    )
+        s = socket.create_connection((config["server"],
+                                      int(config["port"])),
+                                      float(config["timeout"]),
+                                      (config["srcip"], int(config["srcport"])))
+
     except socket.error as msg:
         logging.error("Unable to connect to {}:{} - {}.".format(config["server"],config["port"], msg))
         sys.exit(1)
@@ -174,26 +168,24 @@ def connect_to_server():
                                 certfile=config["certfile"],
                                 ssl_version=ssl.PROTOCOL_TLSv1,
                                 ciphers="AES256-SHA", )
-#TODO: add support for keyfile
+# TODO: add support for keyfile
     logging.info("Connected to {}:{}".format(config["server"], config["port"]))
-    #Set the socket back to blocking
+    # Set the socket back to blocking
     sslsocket.setblocking(1)
     return sslsocket
 
-#TODO: Install script
-#TODO: standard -h for script, help script: find scriptdir -type x -type f, !help foo -> script -h
 
-#Start here
+# Start here
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s - %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.DEBUG)
-    #TODO: config special word for pwd
+    # TODO: config special word for pwd
     changed = parse_arguments()
 
-    #Parse config file
+    # Parse config file
     parse_config(changed)
     logging.info("Parsed Arguments")
 
-    #Connect to server
+    # Connect to server
     try:
         socket = connect_to_server()
         logging.info("Connected")
@@ -201,14 +193,13 @@ def main():
         logging.info("Unable to connect.  Are you banned?: {}".format(e))
         return sys.exit(1)
 
-    #TODO: debug message for adding user
-    #TODO: Handle non-ascii characters
+    # TODO: debug message for adding user
+    # TODO: Handle non-ascii characters
     conn = Connection(socket)
     conn.start()
 
     try:
-        import time
-        while(conn.current_channel==None):
+        while conn.current_channel is None:
             time.sleep(1)
 
         # Add services here
@@ -216,7 +207,7 @@ def main():
         conn.addService(trivia)
         trivia.start()
 
-        #TODO: multiple tokens
+        # TODO: multiple tokens
         while conn.is_alive():
             time.sleep(5)
 
@@ -224,7 +215,7 @@ def main():
         pass
 
     logging.info("Closing down")
-    #close everything down!
+    # close everything down!
     conn.stop()
     socket.close()
     sys.exit(0)
