@@ -1,6 +1,7 @@
 import abc
 import threading
 
+
 class Bot(threading.Thread):
     __metaclass__ = abc.ABCMeta
 
@@ -8,7 +9,7 @@ class Bot(threading.Thread):
         return
 
     @abc.abstractmethod
-    def recv(self, message, id, name):
+    def recv(self, message, name):
         ''' Used to receive a message from the current channel '''
         return
 
