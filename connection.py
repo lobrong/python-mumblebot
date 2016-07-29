@@ -1,20 +1,10 @@
 # Imported modules
-import argparse
-import datetime
 import Mumble_pb2
-import os
-import platform
-#import queue #2TO3 Change this
 import Queue
-import re
-import socket
-import ssl
 import struct
-import subprocess
-import sys
 import threading
 import time
-import thread 
+import logging
 
 import data
 config = data.config
@@ -24,10 +14,6 @@ msgnum = data.msgnum
 #Version of mumble to send to the server: (major, minor, revision).
 #This gets packed in a goofy manner
 version = (1,2,0)
-
-logmsg = lambda x: x
-errmsg = logmsg
-debugmsg = logmsg
 
 class Connection(threading.Thread):
 	socket = None
@@ -58,7 +44,7 @@ class Connection(threading.Thread):
 	pingdata = None
 
 	def __init__(self, socket):
-		print "Initialising Connection"
+		logging.info("Initialising Connection")
 		threading.Thread.__init__(self)
 		self.socket = socket
 		self.daemon = True
@@ -72,8 +58,6 @@ class Connection(threading.Thread):
 
 	#Wait for messages, act on them as appropriate
 	def run(self):
-		self.update_logging()
-
 		#Send back our version info
 		clientversion = Mumble_pb2.Version()
 		clientversion.version = struct.unpack(">I", struct.pack(">HBB", *version))[0]
@@ -83,7 +67,7 @@ class Connection(threading.Thread):
 		clientversion.os = ""#platform.system()
 		clientversion.os_version = ""#platform.release()
 		self.send(clientversion)
-		print "Sent version info"
+		logging.info("Sent version info")
 		#Send auth info
 		authinfo = Mumble_pb2.Authenticate()
 		authinfo.username = config["username"]
@@ -92,7 +76,7 @@ class Connection(threading.Thread):
 		else:
 			authinfo.password = ""
 		self.send(authinfo)
-		print("Authenticated as %s with password %s"%(authinfo.username,authinfo.password))
+		logging.info("Authenticated as %s with password %s"%(authinfo.username, authinfo.password))
 
 		#TODO: Implement tokens
 		#TODO: Timeout on rx of auth message if !mumble server
@@ -115,7 +99,7 @@ class Connection(threading.Thread):
 				data = self.recvsize(size)
 				typename = msgtype[type].__name__
 				#Handle each message, this is going to get inefficient.
-				print "Got {}-byte {} message".format(size, typename)
+				logging.debug("Got {}-byte {} message".format(size, typename))
 				try:
 					{"Version":         self.onVersion,
 					 "ChannelState":    self.onChannelState,
@@ -146,11 +130,11 @@ class Connection(threading.Thread):
 				return
 
 	def send_pings(self):
-		print "Pinger Thread Starting"
+		logging.debug("Pinger Thread Starting")
 		while self._running:
 			self.send(self.pingdata)
 			time.sleep(5)
-		print "Pinger Thread Ending"
+		logging.debug("Pinger Thread Ended")
 
 
 #---------------------------------------------------------------------------------------
@@ -201,7 +185,7 @@ class Connection(threading.Thread):
 		#CamelCase, ReaLly?
 		serverversion.ParseFromString(data)
 		(major, minor, revision) = struct.unpack('>HBB',struct.pack('>I', serverversion.version))
-		print("Server {}.{}.{} {} ({}: {})".format(major, minor, revision,
+		logging.info("Server {}.{}.{} {} ({}: {})".format(major, minor, revision,
 													serverversion.release,
 													serverversion.os,
 													serverversion.os_version))
@@ -281,7 +265,7 @@ class Connection(threading.Thread):
 			userstate.channel_id = to_join
 			self.send(userstate)
 			self.current_channel = to_join
-			print("Joined [c%i] %s"%(to_join, self.channels[to_join].name))
+			logging.info("Joined [c%i] %s"%(to_join, self.channels[to_join].name))
 		self.channellock.release()
 
 	# Add channel to list of stored channels
@@ -304,14 +288,14 @@ class Connection(threading.Thread):
 			self.orphans[t.parent].add(self.channel_id)
 		#Add the channel to the list
 		self.channels[channelstate.channel_id] = t
-		debugmsg("Added new channel %s [%i:%i]"%(t.name, t.parent, channelstate.channel_id))
+		logging.info("Added new channel %s [%i:%i]"%(t.name, t.parent, channelstate.channel_id))
 
 	def updateChannel(self,channelstate):
 		#Update the name
 		if channelstate.name and (self.channels[channelstate.channel_id] != channelstate.name):
 			oldname = self.channels[channelstate.channel_id].name
 			self.channels[channelstate.channel_id].name = channelstate.name
-			debugmsg("Changed channel %i's name from %s to %s"%(
+			logging.debug("Changed channel %i's name from %s to %s"%(
 				channelstate.channel_id, oldname, channelstate.name))
 		#Update the parent
 		if self.channels[channelstate.channel_id].parent != channelstate.parent:
@@ -324,7 +308,7 @@ class Connection(threading.Thread):
 			#Failing that, it's an orphan
 			else:
 				self.orphans.add(channelstate.channel_id)
-			debugmsg("Changed channel %i's (%s) parent from %i to %i"
+			logging.debug("Changed channel %i's (%s) parent from %i to %i"
 					 %(channelstate.channel_id,
 					   self.channels[channelstate.channel_id].name,
 					   oldpid, channelstate.parent))
@@ -333,7 +317,7 @@ class Connection(threading.Thread):
 	def onReject(self, data):
 		reject = Mumble_pb2.Reject()
 		reject.ParseFromString(data)
-		errmsg("Unable to join server (%i): %s"%(reject.type,reject.reason))
+		logging.error("Unable to join server (%i): %s"%(reject.type,reject.reason))
 		#TODO: Auth with certificate
 		self.stop()
 
@@ -384,7 +368,7 @@ class Connection(threading.Thread):
 	#number and the name of the previous channel path
 	def _printchannel(self, channel, parentname):
 		name = parentname + "/" + self.channels[channel].name
-		logmsg("[c%s]\t%s"%(channel, name))
+		logging.info("[c%s]\t%s"%(channel, name))
 		for c in self.channels[channel].children:
 			self._printchannel(c, name)
 
@@ -392,7 +376,7 @@ class Connection(threading.Thread):
 	def printusers(self):
 		#Print the userlist
 		for u in self.users:
-			logmsg("[u%i:c%i]\t%s"%(u, self.users[u][0], self.users[u][1]))
+			logging.info("[u%i:c%i]\t%s"%(u, self.users[u][0], self.users[u][1]))
 
 	#Stop this thread and all subthreads
 	def stop(self):
@@ -410,25 +394,6 @@ class Connection(threading.Thread):
 	#Remove a service.
 	def removeService(self,t):
 		self.services.remove(t);
-
-
-	#------------Logging functions------------
-	def update_logging(self):
-		errmsg = self._err_to_stderr
-		logmsg = self._log_to_stdout
-		debugmsg = self._debug_to_stdout
-
-	def _err_to_stderr(self,msg):
-		msg = "<E-R>"+str(datetime.datetime.now())+": "+msg
-		print >>sys.stderr, msg.encode('utf-8')
-
-	def _log_to_stdout(self,msg):
-		msg = "<I-R>"+str(datetime.datetime.now())+": "+msg
-		print(msg.encode('utf-8'))
-
-	def _debug_to_stdout(self,msg):
-		msg = "<D-R>"+str(datetime.datetime.now())+": "+msg
-		print(msg.encode('utf-8'))
 
 
 #Channel tree

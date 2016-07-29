@@ -1,8 +1,8 @@
 import Mumble_pb2
 #Global config dict, defaults go here
 config = {
-    "server":           "mumble.leetspeak.com.au",
-    "port":             60202,
+    "server":           "119.252.16.236",
+    "port":             64738,
     "srcip":            "",
     "srcport":          0,
     "timeout":          10,

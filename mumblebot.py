@@ -45,6 +45,7 @@ import subprocess
 import sys
 import threading
 import time
+import logging
 
 from connection import Connection
 from trivia import Trivia
@@ -55,12 +56,6 @@ config = data.config
 msgtype = data.msgtype
 msgnum = data.msgnum
 
-
-#Logging functions
-logmsg = lambda x: x
-errmsg = logmsg
-debugmsg = logmsg
-
 #Config file locations
 config_locations = (
     ".",
@@ -69,55 +64,7 @@ config_locations = (
     "/usr/local/etc",
 )
 
-#Start here
-def main():
-    #Set the log functions
-    update_logging()
-    #Parse command-line arguments
-    #TODO: config special word for pwd
-    changed = parse_arguments()
-
-    #Parse config file
-    parse_config(changed)
-    print "Parsed Arguments"
-
-    #Connect to server
-    try:
-        socket = connect_to_server()
-        print "Connected"
-    except ssl.SSLError as e:
-        print "Unable to connect.  Are you banned?: " + str(e)
-        return -1
-
-    #TODO: debug message for adding user
-    #TODO: Handle non-ascii characters
-    conn = Connection(socket)
-    conn.start()
-
-    try:
-        import time
-        while(conn.current_channel==None):
-            time.sleep(1)
-
-        # Add services here
-        trivia = Trivia(conn)
-        conn.addService(trivia)
-        trivia.start()
-
-        #TODO: multiple tokens
-        while conn.is_alive():
-            time.sleep(5)
-
-    except KeyboardInterrupt:
-        pass
-
-    print "Closing down"
-    #close everything down!
-    conn.stop()
-    socket.close()
-    exit(0)
-
-
+logger = None
 
 #Parse the arguments on the command line
 def parse_arguments():
@@ -152,8 +99,7 @@ def parse_arguments():
         if options[o] is not None:
             config[o] = options[o]
             changed.append(o)
-    #Update logging functions
-    update_logging()
+
     return changed
 
 #Try to find the config file.  If it exists, open it and parse it
@@ -162,7 +108,7 @@ def parse_config(changed):
     f = open_config()
     #If it's not found, log and exit
     if f is None:
-        debugmsg("Unable to open config file ({}).".format(config["config"]))
+        logging.debug("Unable to open config file ({}).".format(config["config"]))
         return None
 
     for line in f:
@@ -176,11 +122,10 @@ def parse_config(changed):
         #Add it to the config if it's not set already
         config[key] = value
 
-    update_logging()
-    logmsg("Read config from {}".format(f.name))
+    logging.info("Read config from {}".format(f.name))
     #Print out options, if debugging
     for o in config:
-        debugmsg("Option {}: {}".format(o, config[o]))
+        logging.debug("Option {}: {}".format(o, config[o]))
 
 
 def open_config():
@@ -212,7 +157,7 @@ def open_config():
 def connect_to_server():
     #Make sure we have a server and port
     if "server" not in config:
-        errmsg("No hostname or IP address given.  Unable to proceed.")
+        logging.error("No hostname or IP address given.  Unable to proceed.")
         sys.exit(1)
 
     #Connect to the server
@@ -222,39 +167,67 @@ def connect_to_server():
                                      (config["srcip"], int(config["srcport"]))
                                     )
     except socket.error as msg:
-        errmsg("Unable to connect to {}:{} - {}.".format(config["server"],config["port"], msg))
-        exit(1)
+        logging.error("Unable to connect to {}:{} - {}.".format(config["server"],config["port"], msg))
+        sys.exit(1)
 
     sslsocket = ssl.wrap_socket(s, keyfile=config["keyfile"],
                                 certfile=config["certfile"],
                                 ssl_version=ssl.PROTOCOL_TLSv1,
                                 ciphers="AES256-SHA", )
 #TODO: add support for keyfile
-    logmsg("Connected to {}:{}".format(config["server"], config["port"]))
+    logging.info("Connected to {}:{}".format(config["server"], config["port"]))
     #Set the socket back to blocking
     sslsocket.setblocking(1)
     return sslsocket
 
-#------------Logging functions------------
-def update_logging():
-    errmsg = _err_to_stderr
-    logmsg = _log_to_stdout
-    debugmsg = _debug_to_stdout
-
-def _err_to_stderr(msg):
-    msg = "<E-M>"+str(datetime.datetime.now())+": "+msg
-    print >>sys.stderr, msg.encode('utf-8')
-def _log_to_stdout(msg):
-    msg = "<I-M>"+str(datetime.datetime.now())+": "+msg
-    print(msg.encode('utf-8'))
-def _debug_to_stdout(msg):
-    msg = "<D-M>"+str(datetime.datetime.now())+": "+msg
-    print(msg.encode('utf-8'))
-
-
 #TODO: Install script
 #TODO: standard -h for script, help script: find scriptdir -type x -type f, !help foo -> script -h
 
+#Start here
+def main():
+    logging.basicConfig(format='%(asctime)s %(levelname)s - %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.DEBUG)
+    #TODO: config special word for pwd
+    changed = parse_arguments()
+
+    #Parse config file
+    parse_config(changed)
+    logging.info("Parsed Arguments")
+
+    #Connect to server
+    try:
+        socket = connect_to_server()
+        logging.info("Connected")
+    except ssl.SSLError as e:
+        logging.info("Unable to connect.  Are you banned?: {}".format(e))
+        return sys.exit(1)
+
+    #TODO: debug message for adding user
+    #TODO: Handle non-ascii characters
+    conn = Connection(socket)
+    conn.start()
+
+    try:
+        import time
+        while(conn.current_channel==None):
+            time.sleep(1)
+
+        # Add services here
+        trivia = Trivia(conn)
+        conn.addService(trivia)
+        trivia.start()
+
+        #TODO: multiple tokens
+        while conn.is_alive():
+            time.sleep(5)
+
+    except KeyboardInterrupt:
+        pass
+
+    logging.info("Closing down")
+    #close everything down!
+    conn.stop()
+    socket.close()
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
