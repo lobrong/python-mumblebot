@@ -1,21 +1,10 @@
 # -*- coding: utf-8 -*-
-import argparse
-import datetime
-import Mumble_pb2
-import os
-import platform
-
 import Queue
-import re
-import socket
-import ssl
-import struct
-import subprocess
-import sys
 import threading
 import time
-
+from bot import Bot
 from random import randint
+
 import data
 config = data.config
 
@@ -23,7 +12,7 @@ config = data.config
 QUESTION_LENGTH = 10
 
 #A thread representing a connection to a script
-class Trivia(threading.Thread):
+class Trivia(Bot):
 	process = None
 	conn = None
 	_running = False
