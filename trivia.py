@@ -49,10 +49,15 @@ class Trivia(Bot):
         intro += "<p> - 'quit' to close mumblebot :(</p>"
         self.introduction = intro
         self.send(self.introduction)
-
+        command = None
         while self._running:
             # Check to see new messages!
-            command = self.queue.get()
+            try:
+                command = self.queue.get(block=False)
+            except Queue.Empty:
+                time.sleep(1)
+                continue
+
             msg = command[0]
             name = command[1]
             logging.debug("TB: got {}".format(msg))
@@ -68,7 +73,6 @@ class Trivia(Bot):
                 self.parseCommand(messageSplit[1])
             else:
                 self.checkAnswer(msg, name)
-            time.sleep(1)
 
         # If we're done, send the last words to the chat
         self.conn.send_chat_message("Triviabot hears your pleas for mercy, but triviabot is a hard mistress.")

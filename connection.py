@@ -114,7 +114,12 @@ class Connection(threading.Thread):
 
     def send_msgs(self):
         while self._running:
-            msg = self.txqueue.get()  # Block until msg
+            msg = None
+            try:
+                msg = self.txqueue.get(block=False)
+            except Queue.Empty:
+                pass
+
             if msg is not None:
                 totalsent = 0
                 while totalsent < len(msg):
@@ -129,7 +134,6 @@ class Connection(threading.Thread):
         while self._running:
             self.send(self.pingdata)
             time.sleep(5)
-        logging.debug("Pinger Thread Ended")
 
 
 # ---------------------------------------------------------------------------------------
@@ -362,19 +366,20 @@ class Connection(threading.Thread):
 
     # Stop this thread and all subthreads
     def stop(self):
-        for t in self.services:
-            t.stop()
+        for service in self.services:
+            service.stop()
         self._running = False
-        self.txqueue.put(None)
 
     # ------------Service functions------------
     # Add a service for the receiver to talk to if needed.
-    def addService(self, t):
-        self.services.append(t);
+    def addService(self, service):
+        service.daemon = True
+        self.services.append(service)
 
     # Remove a service.
-    def removeService(self,t):
-        self.services.remove(t);
+    def removeService(self, service):
+        service.stop()
+        self.services.remove(service)
 
 
 # Channel tree
